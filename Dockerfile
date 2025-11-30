@@ -18,17 +18,33 @@ RUN chmod +x scripts/build-all.js
 # Run the build script
 RUN node scripts/build-all.js
 
-# Stage 2: Serve with Nginx
-FROM nginx:alpine
+# Stage 2: Serve with Nginx + Python Backend
+FROM python:3.11-slim
 
-# Copy the build output (dist) to Nginx html directory
+# Install Nginx and ffmpeg
+RUN apt-get update && apt-get install -y nginx ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+WORKDIR /app/backend
+COPY apps/video-downloader/backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Backend Code
+COPY apps/video-downloader/backend/ .
+
+# Copy Frontend Build
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy custom Nginx configuration
+# Copy Nginx Config
+# In Debian/Ubuntu nginx, conf.d is included by default in nginx.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Remove default site if it exists
+RUN rm -f /etc/nginx/sites-enabled/default
 
-# Expose port 80
+# Copy Start Script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 EXPOSE 80
 
-# Start Nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/start.sh"]
