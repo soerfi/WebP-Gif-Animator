@@ -55,8 +55,13 @@ async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks
                     'player_skip': ['webpage', 'configs'],
                 }
             },
-            # geo_bypass: True,
         }
+
+        # Add cookies if available
+        cookies_file = '/app/backend/cookies.txt'
+        if os.path.exists(cookies_file):
+            ydl_opts['cookiefile'] = cookies_file
+            print(f"Using cookies from {cookies_file}")
 
         if req.format == 'audio':
             ydl_opts.update({
@@ -136,6 +141,22 @@ async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks
         cleanup_file(work_dir)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/upload-cookies")
+async def upload_cookies(file: bytes = None):
+    """Upload cookies.txt file for authentication"""
+    if not file:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    cookies_path = "/app/backend/cookies.txt"
+    try:
+        with open(cookies_path, 'wb') as f:
+            f.write(file)
+        return {"message": "Cookies uploaded successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
