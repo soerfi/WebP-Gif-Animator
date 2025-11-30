@@ -11,6 +11,8 @@ function App() {
   const [cropEnd, setCropEnd] = useState('')
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+  const [cookieFile, setCookieFile] = useState<File | null>(null)
+  const [uploadingCookies, setUploadingCookies] = useState(false)
 
   const handleDownload = async (e: FormEvent) => {
     e.preventDefault()
@@ -69,6 +71,35 @@ function App() {
     }
   }
 
+  const handleCookieUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingCookies(true)
+    setStatus(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/video-downloader/upload-cookies', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload cookies')
+      }
+
+      setCookieFile(file)
+      setStatus({ type: 'success', message: 'Cookies uploaded! You can now download from YouTube, Instagram, etc.' })
+    } catch (err: any) {
+      setStatus({ type: 'error', message: err.message })
+    } finally {
+      setUploadingCookies(false)
+    }
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
       <motion.div
@@ -90,6 +121,39 @@ function App() {
           <p className="text-gray-400 text-lg">
             Download from YouTube, Vimeo, Instagram & more
           </p>
+        </div>
+
+        {/* Cookie Upload Section */}
+        <div className="card backdrop-blur-xl bg-opacity-50 border-gray-800 mb-6">
+          <div className="flex items-start gap-4">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold mb-2">Authentication Required</h3>
+              <p className="text-sm text-gray-400 mb-4">
+                YouTube, Instagram & Vimeo require cookies.
+                {cookieFile && <span className="text-green-400"> ✓ Cookies loaded: {cookieFile.name}</span>}
+              </p>
+              <label className="relative inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg cursor-pointer hover:from-blue-500 hover:to-purple-500 transition-all">
+                <input
+                  type="file"
+                  accept=".txt"
+                  onChange={handleCookieUpload}
+                  className="hidden"
+                  disabled={uploadingCookies}
+                />
+                {uploadingCookies ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    {cookieFile ? 'Update Cookies' : 'Upload cookies.txt'}
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
         </div>
 
         <div className="card backdrop-blur-xl bg-opacity-50 border-gray-800">

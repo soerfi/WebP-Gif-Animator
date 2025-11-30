@@ -3,7 +3,7 @@ import shutil
 import uuid
 import subprocess
 from typing import Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import yt_dlp
@@ -143,17 +143,18 @@ async def download_video(req: DownloadRequest, background_tasks: BackgroundTasks
 
 
 @app.post("/upload-cookies")
-async def upload_cookies(file: bytes = None):
+async def upload_cookies(file: UploadFile = File(...)):
     """Upload cookies.txt file for authentication"""
-    if not file:
-        raise HTTPException(status_code=400, detail="No file provided")
-    
     cookies_path = "/app/backend/cookies.txt"
     try:
+        contents = await file.read()
         with open(cookies_path, 'wb') as f:
-            f.write(file)
-        return {"message": "Cookies uploaded successfully"}
+            f.write(contents)
+        print(f"Cookies uploaded successfully to {cookies_path}")
+        return {"message": "Cookies uploaded successfully", "filename": file.filename}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
