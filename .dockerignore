@@ -4,7 +4,6 @@ dist
 .DS_Store
 .env
 .env.local
-!apps/nano-studio-pro/.env
 apps/*/node_modules
 apps/*/dist
 menu/node_modules
