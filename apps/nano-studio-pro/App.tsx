@@ -6,7 +6,8 @@ import { ImageCropper } from './components/ImageCropper';
 import { PRESETS, DEFAULT_LIFESTYLE_PROMPT } from './constants';
 import { Preset, ProcessingState, SourceImage, IMAGE_LABELS, PresetType, ProcessedImage, AVAILABLE_ANGLES, SavedStyle } from './types';
 import { processImagesWithGemini, upscaleImage } from './services/geminiService';
-import { fetchSharedStyles, publishSharedStyle, deleteSharedStyle, SharedStyle } from './services/styleService';
+import { fetchSharedStyles, publishSharedStyle, deleteSharedStyle, type SharedStyle } from './services/styleService';
+import { fetchSharedPrompts, publishSharedPrompt, deleteSharedPrompt, type SharedPrompt } from './services/promptService';
 import { Download, X, AlertCircle, Wand2, Plus, ZoomIn, Maximize2, ChevronLeft, ChevronRight, Crop, Save, Trash2, LayoutTemplate, RotateCw, Settings2, Check, ArrowUpCircle, Info, Loader2, Key, ImagePlus, Ratio, Sun, Home, AlignLeft, FileType, Library, ArrowDownAZ, Calendar, Grid } from 'lucide-react';
 
 interface SavedPrompt {
@@ -44,6 +45,10 @@ const App: React.FC = () => {
     const [sharedStyles, setSharedStyles] = useState<SharedStyle[]>([]);
     const [activeLibraryTab, setActiveLibraryTab] = useState<'local' | 'shared'>('local');
     const [isPublishing, setIsPublishing] = useState(false);
+
+    // Shared Prompts State
+    const [sharedPrompts, setSharedPrompts] = useState<SharedPrompt[]>([]);
+    const [activePromptTab, setActivePromptTab] = useState<'local' | 'shared'>('local');
 
     const [styleSort, setStyleSort] = useState<SortOption>('newest');
     const [isNamingStyle, setIsNamingStyle] = useState(false);
@@ -120,14 +125,58 @@ const App: React.FC = () => {
 
     // -- Shared Styles Logic --
 
-    useEffect(() => {
-        loadSharedStyles();
-    }, [activeLibraryTab]);
 
+    // Helper to load shared styles
     const loadSharedStyles = async () => {
         if (activeLibraryTab === 'shared') {
             const styles = await fetchSharedStyles();
             setSharedStyles(styles);
+        }
+    };
+
+    useEffect(() => {
+        loadSharedStyles();
+    }, [activeLibraryTab]);
+
+    // Load Shared Prompts
+    useEffect(() => {
+        const loadSharedPrompts = async () => {
+            if (activePromptTab === 'shared') {
+                const prompts = await fetchSharedPrompts();
+                setSharedPrompts(prompts);
+            }
+        };
+        loadSharedPrompts();
+    }, [activePromptTab]);
+
+    // ... (rest of local storage effect)
+
+    const handlePublishPrompt = async () => {
+        if (!newPresetName.trim() || !customPrompt.trim()) return;
+        setIsPublishing(true);
+        try {
+            await publishSharedPrompt(newPresetName.trim(), customPrompt.trim());
+
+            setNewPresetName('');
+            setIsNamingPreset(false);
+            if (activePromptTab === 'shared') {
+                const prompts = await fetchSharedPrompts();
+                setSharedPrompts(prompts);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Failed to publish prompt.");
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    const handleDeleteSharedPrompt = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (window.confirm("Delete this shared prompt?")) {
+            await deleteSharedPrompt(id);
+            const prompts = await fetchSharedPrompts();
+            setSharedPrompts(prompts);
         }
     };
 
@@ -980,8 +1029,8 @@ const App: React.FC = () => {
                                                                 <button
                                                                     onClick={() => setActiveLibraryTab('local')}
                                                                     className={`flex-1 text-xs font-medium px-2 py-1 rounded-md transition-all ${activeLibraryTab === 'local'
-                                                                            ? 'bg-white text-slate-900 shadow-sm'
-                                                                            : 'text-slate-500 hover:text-slate-700'
+                                                                        ? 'bg-white text-slate-900 shadow-sm'
+                                                                        : 'text-slate-500 hover:text-slate-700'
                                                                         }`}
                                                                 >
                                                                     My Styles ({savedStyles.length})
@@ -989,8 +1038,8 @@ const App: React.FC = () => {
                                                                 <button
                                                                     onClick={() => setActiveLibraryTab('shared')}
                                                                     className={`flex-1 text-xs font-medium px-2 py-1 rounded-md transition-all ${activeLibraryTab === 'shared'
-                                                                            ? 'bg-white text-blue-600 shadow-sm'
-                                                                            : 'text-slate-500 hover:text-slate-700'
+                                                                        ? 'bg-white text-blue-600 shadow-sm'
+                                                                        : 'text-slate-500 hover:text-slate-700'
                                                                         }`}
                                                                 >
                                                                     Shared ({sharedStyles.length})
@@ -1224,18 +1273,33 @@ const App: React.FC = () => {
                                                     </button>
                                                 ) : (
                                                     <div className="flex items-center gap-1">
-                                                        <input
-                                                            autoFocus
-                                                            onFocus={(e) => e.target.select()}
-                                                            type="text"
-                                                            placeholder="Preset Name"
-                                                            className="text-xs border border-blue-300 rounded px-1 py-0.5 w-24 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-slate-900"
-                                                            value={newPresetName}
-                                                            onChange={(e) => setNewPresetName(e.target.value)}
-                                                            onKeyDown={(e) => e.key === 'Enter' && confirmSave()}
-                                                        />
-                                                        <button onClick={confirmSave} className="text-green-600 hover:text-green-700 p-0.5"><Check size={14} /></button>
-                                                        <button onClick={cancelSave} className="text-red-500 hover:text-red-600 p-0.5"><X size={14} /></button>
+                                                        <div className="flex flex-col gap-1 items-end">
+                                                            <div className="flex items-center gap-1">
+                                                                <input
+                                                                    autoFocus
+                                                                    onFocus={(e) => e.target.select()}
+                                                                    type="text"
+                                                                    placeholder="Preset Name"
+                                                                    className="text-xs border border-blue-300 rounded px-1 py-0.5 w-24 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-slate-900"
+                                                                    value={newPresetName}
+                                                                    onChange={(e) => setNewPresetName(e.target.value)}
+                                                                    onKeyDown={(e) => e.key === 'Enter' && (isPublishing ? handlePublishPrompt() : confirmSave())}
+                                                                />
+                                                                <button onClick={() => isPublishing ? handlePublishPrompt() : confirmSave()} className="text-green-600 hover:text-green-700 p-0.5">
+                                                                    {isPublishing ? <div className="animate-spin"><Loader2 size={14} /></div> : <Check size={14} />}
+                                                                </button>
+                                                                <button onClick={cancelSave} className="text-red-500 hover:text-red-600 p-0.5"><X size={14} /></button>
+                                                            </div>
+                                                            <label className="flex items-center gap-1 cursor-pointer select-none">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isPublishing}
+                                                                    onChange={(e) => setIsPublishing(e.target.checked)}
+                                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3 h-3"
+                                                                />
+                                                                <span className="text-[9px] text-slate-500 font-medium">Publish</span>
+                                                            </label>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -1250,40 +1314,82 @@ const App: React.FC = () => {
                                             />
                                         </div>
 
-                                        {savedPrompts.length > 0 && (
+                                        {(savedPrompts.length > 0 || activePromptTab === 'shared') && (
                                             <div className="mt-4">
-                                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Saved Presets</h4>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {savedPrompts.map((p, i) => (
-                                                        <div key={i} className={`group flex items-center rounded-full pl-1 pr-1 py-1 transition-all max-w-full border ${promptToDelete === i ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
-                                                            <button
-                                                                className="flex items-center gap-2 px-2 text-left"
-                                                                onClick={() => {
-                                                                    setCustomPrompt(p.text);
-                                                                    if (p.referenceImage) {
-                                                                        setReferenceImage(p.referenceImage);
-                                                                    } else {
-                                                                        setReferenceImage(null);
-                                                                    }
-                                                                }}
-                                                                title={p.text}
-                                                            >
-                                                                {p.referenceImage && (
-                                                                    <div className="w-6 h-6 rounded overflow-hidden border border-slate-200 flex-shrink-0">
-                                                                        <img src={p.referenceImage} className="w-full h-full object-cover" alt="ref" />
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Library</h4>
+                                                    <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
+                                                        <button
+                                                            onClick={() => setActivePromptTab('local')}
+                                                            className={`text-[9px] font-bold px-2 py-1 rounded transition-all ${activePromptTab === 'local' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            My Prompts
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setActivePromptTab('shared')}
+                                                            className={`text-[9px] font-bold px-2 py-1 rounded transition-all ${activePromptTab === 'shared' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            Shared
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto w-full">
+                                                    {activePromptTab === 'local' ? (
+                                                        savedPrompts.map((p, i) => (
+                                                            <div key={i} className={`group flex items-center rounded-full pl-1 pr-1 py-1 transition-all max-w-full border ${promptToDelete === i ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+                                                                <button
+                                                                    className="flex items-center gap-2 px-2 text-left"
+                                                                    onClick={() => {
+                                                                        setCustomPrompt(p.text);
+                                                                        if (p.referenceImage) {
+                                                                            setReferenceImage(p.referenceImage);
+                                                                        } else {
+                                                                            setReferenceImage(null);
+                                                                        }
+                                                                    }}
+                                                                    title={p.text}
+                                                                >
+                                                                    {p.referenceImage && (
+                                                                        <div className="w-6 h-6 rounded overflow-hidden border border-slate-200 flex-shrink-0">
+                                                                            <img src={p.referenceImage} className="w-full h-full object-cover" alt="ref" />
+                                                                        </div>
+                                                                    )}
+                                                                    <span className="text-xs truncate max-w-[120px] font-medium text-slate-600">{p.name || "Untitled"}</span>
+                                                                </button>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); deletePrompt(i); }}
+                                                                    className={`p-1 rounded-full ${promptToDelete === i ? 'text-red-600 hover:bg-red-100' : 'text-slate-300 hover:text-red-500'}`}
+                                                                    title={promptToDelete === i ? "Click to Confirm Delete" : "Delete"}
+                                                                >
+                                                                    <Trash2 size={12} />
+                                                                </button>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        // Shared Prompts List
+                                                        sharedPrompts.length === 0 ? (
+                                                            <div className="w-full text-center py-2 text-[10px] text-slate-400 border border-dashed rounded-lg bg-slate-50">
+                                                                No shared prompts yet. Be the first to share!
+                                                            </div>
+                                                        ) : (
+                                                            sharedPrompts.map((p) => (
+                                                                <div key={p.id} className="group flex items-center justify-between w-full bg-white border border-slate-200 rounded-lg p-2 hover:border-blue-300 transition-all cursor-pointer" onClick={() => setCustomPrompt(p.text)}>
+                                                                    <div className="flex-1 min-w-0 pr-2">
+                                                                        <p className="text-xs text-slate-600 line-clamp-2 leading-snug">{p.text}</p>
+                                                                        <p className="text-[9px] text-slate-400 mt-0.5">{new Date(p.timestamp).toLocaleDateString()}</p>
                                                                     </div>
-                                                                )}
-                                                                <span className="text-xs truncate max-w-[120px] font-medium text-slate-600">{p.name}</span>
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); deletePrompt(i); }}
-                                                                className={`p-1 rounded-full ${promptToDelete === i ? 'text-red-600 hover:bg-red-100' : 'text-slate-300 hover:text-red-500'}`}
-                                                                title={promptToDelete === i ? "Click to Confirm Delete" : "Delete"}
-                                                            >
-                                                                <Trash2 size={12} />
-                                                            </button>
-                                                        </div>
-                                                    ))}
+                                                                    <button
+                                                                        onClick={(e) => handleDeleteSharedPrompt(p.id, e)}
+                                                                        className="p-1.5 rounded-md text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                                                                        title="Delete Shared Prompt"
+                                                                    >
+                                                                        <Trash2 size={12} />
+                                                                    </button>
+                                                                </div>
+                                                            ))
+                                                        )
+                                                    )}
                                                 </div>
                                             </div>
                                         )}

@@ -272,3 +272,71 @@ def get_style_image(filename: str):
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(file_path)
 
+
+# --- Shared Prompts API ---
+
+PROMPTS_DIR = "/app/data/prompts"
+os.makedirs(PROMPTS_DIR, exist_ok=True)
+
+class Prompt(BaseModel):
+    id: str
+    name: str
+    text: str
+    timestamp: int
+
+@app.get("/prompts/")
+def list_prompts():
+    prompts = []
+    if not os.path.exists(PROMPTS_DIR):
+        return []
+    
+    for filename in os.listdir(PROMPTS_DIR):
+        if filename.endswith(".json"):
+            try:
+                import json
+                with open(os.path.join(PROMPTS_DIR, filename), 'r') as f:
+                    prompts.append(json.load(f))
+            except Exception as e:
+                print(f"Error reading prompt {filename}: {e}")
+    
+    # Sort by timestamp desc
+    return sorted(prompts, key=lambda x: x.get('timestamp', 0), reverse=True)
+
+class PublishPromptRequest(BaseModel):
+    name: str
+    text: str
+
+@app.post("/prompts/")
+def publish_prompt(req: PublishPromptRequest):
+    try:
+        import time
+        import json
+        
+        prompt_id = str(uuid.uuid4())
+        
+        # Save Metadata
+        prompt_data = {
+            "id": prompt_id,
+            "name": req.name,
+            "text": req.text,
+            "timestamp": int(time.time() * 1000)
+        }
+        
+        json_path = os.path.join(PROMPTS_DIR, f"{prompt_id}.json")
+        with open(json_path, "w") as f:
+            json.dump(prompt_data, f)
+            
+        return prompt_data
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/prompts/{prompt_id}")
+def delete_prompt(prompt_id: str):
+    json_path = os.path.join(PROMPTS_DIR, f"{prompt_id}.json")
+    
+    if os.path.exists(json_path):
+        os.remove(json_path)
+        
+    return {"status": "deleted"}
