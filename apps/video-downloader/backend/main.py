@@ -176,3 +176,99 @@ async def upload_cookies(file: UploadFile = File(...)):
 def health():
     return {"status": "ok"}
 
+
+# --- Shared Styles API ---
+
+STYLES_DIR = "/app/data/styles"
+os.makedirs(STYLES_DIR, exist_ok=True)
+
+class Style(BaseModel):
+    id: str
+    name: str
+    prompt: str
+    imageUrl: str  # Relative URL or Base64 (we'll store as file and serve url)
+    timestamp: int
+
+@app.get("/styles")
+def list_styles():
+    styles = []
+    if not os.path.exists(STYLES_DIR):
+        return []
+    
+    for filename in os.listdir(STYLES_DIR):
+        if filename.endswith(".json"):
+            try:
+                import json
+                with open(os.path.join(STYLES_DIR, filename), 'r') as f:
+                    styles.append(json.load(f))
+            except Exception as e:
+                print(f"Error reading style {filename}: {e}")
+    
+    # Sort by timestamp desc
+    return sorted(styles, key=lambda x: x.get('timestamp', 0), reverse=True)
+
+class PublishStyleRequest(BaseModel):
+    name: str
+    prompt: str
+    imageData: str # Base64
+
+@app.post("/styles")
+def publish_style(req: PublishStyleRequest):
+    try:
+        import time
+        import base64
+        import json
+
+        style_id = str(uuid.uuid4())
+        
+        # Save Image
+        image_filename = f"{style_id}.png"
+        image_path = os.path.join(STYLES_DIR, image_filename)
+        
+        # Simple Base64 decode
+        if "," in req.imageData:
+            header, encoded = req.imageData.split(",", 1)
+        else:
+            encoded = req.imageData
+            
+        with open(image_path, "wb") as f:
+            f.write(base64.b64decode(encoded))
+            
+        # Save Metadata
+        style_data = {
+            "id": style_id,
+            "name": req.name,
+            "prompt": req.prompt,
+            "imageUrl": f"/api/styles/image/{image_filename}",
+            "timestamp": int(time.time() * 1000)
+        }
+        
+        json_path = os.path.join(STYLES_DIR, f"{style_id}.json")
+        with open(json_path, "w") as f:
+            json.dump(style_data, f)
+            
+        return style_data
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/styles/{style_id}")
+def delete_style(style_id: str):
+    json_path = os.path.join(STYLES_DIR, f"{style_id}.json")
+    image_path = os.path.join(STYLES_DIR, f"{style_id}.png")
+    
+    if os.path.exists(json_path):
+        os.remove(json_path)
+    if os.path.exists(image_path):
+        os.remove(image_path)
+        
+    return {"status": "deleted"}
+
+@app.get("/styles/image/{filename}")
+def get_style_image(filename: str):
+    file_path = os.path.join(STYLES_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(file_path)
+

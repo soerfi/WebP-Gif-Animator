@@ -24,6 +24,7 @@ echo "▶️ Starting new container..."
 docker run -d \
   --name my-app-menu \
   --restart unless-stopped \
+  -v $(pwd)/data:/app/data \
   -p 80:80 \
   my-app-menu
 

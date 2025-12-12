@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y nginx ffmpeg && rm -rf /var/lib/apt/lis
 WORKDIR /app/backend
 COPY apps/video-downloader/backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 # Copy Backend Code
 COPY apps/video-downloader/backend/ .

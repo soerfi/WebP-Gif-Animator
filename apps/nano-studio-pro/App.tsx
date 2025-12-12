@@ -6,6 +6,7 @@ import { ImageCropper } from './components/ImageCropper';
 import { PRESETS, DEFAULT_LIFESTYLE_PROMPT } from './constants';
 import { Preset, ProcessingState, SourceImage, IMAGE_LABELS, PresetType, ProcessedImage, AVAILABLE_ANGLES, SavedStyle } from './types';
 import { processImagesWithGemini, upscaleImage } from './services/geminiService';
+import { fetchSharedStyles, publishSharedStyle, deleteSharedStyle, SharedStyle } from './services/styleService';
 import { Download, X, AlertCircle, Wand2, Plus, ZoomIn, Maximize2, ChevronLeft, ChevronRight, Crop, Save, Trash2, LayoutTemplate, RotateCw, Settings2, Check, ArrowUpCircle, Info, Loader2, Key, ImagePlus, Ratio, Sun, Home, AlignLeft, FileType, Library, ArrowDownAZ, Calendar, Grid } from 'lucide-react';
 
 interface SavedPrompt {
@@ -40,6 +41,10 @@ const App: React.FC = () => {
 
     // Style Library State
     const [savedStyles, setSavedStyles] = useState<SavedStyle[]>([]);
+    const [sharedStyles, setSharedStyles] = useState<SharedStyle[]>([]);
+    const [activeLibraryTab, setActiveLibraryTab] = useState<'local' | 'shared'>('local');
+    const [isPublishing, setIsPublishing] = useState(false);
+
     const [styleSort, setStyleSort] = useState<SortOption>('newest');
     const [isNamingStyle, setIsNamingStyle] = useState(false);
     const [newStyleName, setNewStyleName] = useState('');
@@ -112,6 +117,44 @@ const App: React.FC = () => {
             setLifestyleContext('');
         }
     }, [selectedPreset?.id]);
+
+    // -- Shared Styles Logic --
+
+    useEffect(() => {
+        loadSharedStyles();
+    }, [activeLibraryTab]);
+
+    const loadSharedStyles = async () => {
+        if (activeLibraryTab === 'shared') {
+            const styles = await fetchSharedStyles();
+            setSharedStyles(styles);
+        }
+    };
+
+    const handlePublishStyle = async () => {
+        if (!referenceImage || !newStyleName.trim()) return;
+        setIsPublishing(true);
+        try {
+            const compressed = await resizeForStorage(referenceImage);
+            await publishSharedStyle(newStyleName.trim(), customPrompt, compressed);
+            await loadSharedStyles();
+            setIsNamingStyle(false);
+            setNewStyleName('');
+            setActiveLibraryTab('shared');
+        } catch (e) {
+            alert("Failed to publish style.");
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    const handleDeleteShared = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (confirm("Are you sure you want to delete this shared style?")) {
+            await deleteSharedStyle(id);
+            loadSharedStyles();
+        }
+    };
 
 
 
@@ -876,7 +919,7 @@ const App: React.FC = () => {
                                                             {isNamingStyle && (
                                                                 <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-4">
                                                                     <span className="text-xs font-bold text-slate-600 mb-2">Name this Style</span>
-                                                                    <div className="flex w-full gap-2">
+                                                                    <div className="flex w-full gap-2 mb-2">
                                                                         <input
                                                                             autoFocus
                                                                             type="text"
@@ -884,11 +927,23 @@ const App: React.FC = () => {
                                                                             placeholder="e.g. Neon Studio"
                                                                             value={newStyleName}
                                                                             onChange={(e) => setNewStyleName(e.target.value)}
-                                                                            onKeyDown={(e) => e.key === 'Enter' && saveCurrentStyle()}
+                                                                            onKeyDown={(e) => e.key === 'Enter' && (isPublishing ? handlePublishStyle() : saveCurrentStyle())}
                                                                         />
-                                                                        <button onClick={saveCurrentStyle} className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700"><Check size={14} /></button>
+                                                                        <button onClick={() => isPublishing ? handlePublishStyle() : saveCurrentStyle()} className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700">
+                                                                            {isPublishing ? <div className="animate-spin"><Loader2 size={14} /></div> : <Check size={14} />}
+                                                                        </button>
                                                                         <button onClick={() => { setIsNamingStyle(false); setNewStyleName(''); }} className="bg-slate-200 text-slate-600 p-1 rounded hover:bg-slate-300"><X size={14} /></button>
                                                                     </div>
+
+                                                                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={isPublishing}
+                                                                            onChange={(e) => setIsPublishing(e.target.checked)}
+                                                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3 h-3"
+                                                                        />
+                                                                        <span className="text-[10px] text-slate-500 font-medium">Publish to Community</span>
+                                                                    </label>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -916,9 +971,32 @@ const App: React.FC = () => {
                                                 {/* Style Library Section */}
                                                 <div className="border-t border-slate-100 pt-4">
                                                     <div className="flex items-center justify-between mb-3">
-                                                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                                                            <Library size={12} /> Library ({savedStyles.length})
-                                                        </h3>
+                                                        <div className="flex items-center gap-3">
+                                                            <h3 className="font-medium text-slate-800 flex items-center gap-2">
+                                                                <Library size={18} className="text-blue-600" />
+                                                                Style Library
+                                                            </h3>
+                                                            <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                                                                <button
+                                                                    onClick={() => setActiveLibraryTab('local')}
+                                                                    className={`flex-1 text-xs font-medium px-2 py-1 rounded-md transition-all ${activeLibraryTab === 'local'
+                                                                            ? 'bg-white text-slate-900 shadow-sm'
+                                                                            : 'text-slate-500 hover:text-slate-700'
+                                                                        }`}
+                                                                >
+                                                                    My Styles ({savedStyles.length})
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setActiveLibraryTab('shared')}
+                                                                    className={`flex-1 text-xs font-medium px-2 py-1 rounded-md transition-all ${activeLibraryTab === 'shared'
+                                                                            ? 'bg-white text-blue-600 shadow-sm'
+                                                                            : 'text-slate-500 hover:text-slate-700'
+                                                                        }`}
+                                                                >
+                                                                    Shared ({sharedStyles.length})
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                         <div className="flex bg-slate-100 rounded p-0.5">
                                                             <button onClick={() => setStyleSort('newest')} className={`p-1 rounded ${styleSort === 'newest' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="Newest"><Calendar size={12} /></button>
                                                             <button onClick={() => setStyleSort('oldest')} className={`p-1 rounded ${styleSort === 'oldest' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`} title="Oldest"><RotateCw size={12} className="rotate-180" /></button>
@@ -926,54 +1004,94 @@ const App: React.FC = () => {
                                                         </div>
                                                     </div>
 
-                                                    {savedStyles.length === 0 ? (
-                                                        <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                                                            <Grid size={20} className="mx-auto text-slate-300 mb-1" />
-                                                            <p className="text-[10px] text-slate-400">Save your favorite styles here.</p>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto custom-scrollbar pr-1">
-                                                            {getSortedStyles().map((style) => (
-                                                                <div
-                                                                    key={style.id}
-                                                                    className="relative group aspect-square rounded-lg border border-slate-200 bg-white overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
-                                                                    onClick={() => setReferenceImage(style.imageData)}
-                                                                >
-                                                                    <img src={style.imageData} alt={style.name} className="w-full h-full object-cover" />
-                                                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 pt-4">
-                                                                        <p className="text-[9px] text-white font-medium truncate leading-tight">{style.name}</p>
-                                                                    </div>
-
-                                                                    {/* Delete Confirm Overlay */}
-                                                                    {styleToDelete === style.id ? (
-                                                                        <div
-                                                                            className="absolute inset-0 bg-red-500/90 flex flex-col items-center justify-center p-1 text-center animate-in fade-in duration-200"
-                                                                            onClick={(e) => { e.stopPropagation(); deleteStyle(style.id); }}
-                                                                        >
-                                                                            <Trash2 size={16} className="text-white mb-1" />
-                                                                            <span className="text-[8px] text-white font-bold uppercase">Confirm</span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <button
-                                                                            className="absolute top-1 right-1 p-1 bg-black/20 hover:bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-all"
-                                                                            onClick={(e) => { e.stopPropagation(); deleteStyle(style.id); }}
-                                                                        >
-                                                                            <X size={10} />
-                                                                        </button>
-                                                                    )}
-
-                                                                    {/* Active Indicator */}
-                                                                    {referenceImage === style.imageData && (
-                                                                        <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full border border-white shadow-sm"></div>
-                                                                    )}
+                                                    <div className="space-y-3 overflow-y-auto max-h-[400px] pr-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                                                        {activeLibraryTab === 'local' ? (
+                                                            savedStyles.length === 0 ? (
+                                                                <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                                                                    <Grid size={20} className="mx-auto text-slate-300 mb-1" />
+                                                                    <p className="text-[10px] text-slate-400">Save your favorite styles here.</p>
                                                                 </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                            ) : (
+                                                                <div className="grid grid-cols-3 gap-2">
+                                                                    {getSortedStyles().map((style) => (
+                                                                        <div
+                                                                            key={style.id}
+                                                                            className="relative group aspect-square rounded-lg border border-slate-200 bg-white overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+                                                                            onClick={() => {
+                                                                                setReferenceImage(style.imageData);
+                                                                                if (style.prompt) setCustomPrompt(style.prompt);
+                                                                            }}
+                                                                        >
+                                                                            <img src={style.imageData} alt={style.name} className="w-full h-full object-cover" />
+                                                                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 pt-4">
+                                                                                <p className="text-[9px] text-white font-medium truncate leading-tight">{style.name}</p>
+                                                                            </div>
+
+                                                                            {/* Delete Confirm Overlay */}
+                                                                            {styleToDelete === style.id ? (
+                                                                                <div
+                                                                                    className="absolute inset-0 bg-red-500/90 flex flex-col items-center justify-center p-1 text-center animate-in fade-in duration-200"
+                                                                                    onClick={(e) => { e.stopPropagation(); deleteStyle(style.id); }}
+                                                                                >
+                                                                                    <Trash2 size={16} className="text-white mb-1" />
+                                                                                    <span className="text-[8px] text-white font-bold uppercase">Confirm</span>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <button
+                                                                                    className="absolute top-1 right-1 p-1 bg-black/20 hover:bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-all"
+                                                                                    onClick={(e) => { e.stopPropagation(); deleteStyle(style.id); }}
+                                                                                >
+                                                                                    <X size={10} />
+                                                                                </button>
+                                                                            )}
+
+                                                                            {/* Active Indicator */}
+                                                                            {referenceImage === style.imageData && (
+                                                                                <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full border border-white shadow-sm"></div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )
+                                                        ) : (
+                                                            // SHARED STYLES LIST
+                                                            sharedStyles.length === 0 ? (
+                                                                <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                                                                    <Grid size={20} className="mx-auto text-slate-300 mb-1" />
+                                                                    <p className="text-[10px] text-slate-400">No shared styles yet.</p>
+                                                                    <p className="text-[9px] text-slate-400">Be the first to share one!</p>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="grid grid-cols-3 gap-2">
+                                                                    {sharedStyles.map((style) => (
+                                                                        <div
+                                                                            key={style.id}
+                                                                            className="relative group aspect-square rounded-lg border border-slate-200 bg-white overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+                                                                            onClick={() => {
+                                                                                setReferenceImage(style.imageUrl);
+                                                                                if (style.prompt) setCustomPrompt(style.prompt);
+                                                                            }}
+                                                                        >
+                                                                            <img src={style.imageUrl} alt={style.name} className="w-full h-full object-cover" />
+                                                                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 pt-4">
+                                                                                <p className="text-[9px] text-white font-medium truncate leading-tight">{style.name}</p>
+                                                                            </div>
+
+                                                                            <button
+                                                                                onClick={(e) => handleDeleteShared(style.id, e)}
+                                                                                className="absolute top-1 right-1 p-1 bg-black/20 hover:bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-all"
+                                                                            >
+                                                                                <Trash2 size={10} />
+                                                                            </button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
-
                                         {/* LIFESTYLE Specific Controls */}
                                         {selectedPreset.id === PresetType.LIFESTYLE && (
                                             <div className="mb-4 space-y-4">
@@ -1306,7 +1424,7 @@ const App: React.FC = () => {
                     </>
                 )}
             </main>
-        </div>
+        </div >
     );
 };
 
