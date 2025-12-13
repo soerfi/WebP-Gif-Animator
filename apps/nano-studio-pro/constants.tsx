@@ -93,6 +93,8 @@ Final image aspect ratio must be exactly 3:4.`,
 
 Completely remove the background and isolate the product cleanly. No cutout artifacts, no halos, no fringing, no transparency errors.
 
+The final background must be 100 percent pure white. Absolute white only. No off white tones, no gradients, no texture, no shadows, no reflections, no background artifacts of any kind.
+
 If any part of the product is occluded by hands, models or objects, fully reconstruct the hidden areas so the product appears complete, intact and brand new. Reconstructed parts must be geometrically, materially and visually consistent with the original product. No guessed details, no design changes, no simplification.
 
 Product accuracy has absolute priority. Colors, materials, textures, proportions, logos, prints, stitching, graphics and construction details must remain 1 to 1 accurate. In no case may branding elements be altered, resized, redrawn or reinterpreted.
@@ -103,9 +105,7 @@ Edges must be precise and natural. Maintain correct contours, cut lines and silh
 
 Repair must respect real world construction. Seams, panels, hems, edges and joins must align perfectly and follow realistic garment or product logic.
 
-Lighting must remain neutral, clean and consistent across the entire product. No dramatic lighting, no shadows baked into the product, no highlights added that did not exist.
-
-The final background must be clean and uniform, suitable for ecommerce. Default to pure white unless otherwise specified. No gradients, no texture, no shadows, no reflections.
+Lighting must remain neutral, clean and consistent across the entire product. No dramatic lighting. No baked in shadows. No added highlights.
 
 Crop clean and balanced. Center the product. No unnecessary whitespace. Do not cut off any part of the product.
 
